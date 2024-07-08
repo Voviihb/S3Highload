@@ -1,9 +1,11 @@
 from database.filename_generator import generate_unique_name
+
 from database.db_operations import insert_file_info
 
 
 def user_input():
     orders = []
+    files = []
     print("Enter size, unit (b, kb, mb, gb, tb) and count (e.g., '17 mb 100') or 'end': ")
     while True:
         response = input()
@@ -26,7 +28,9 @@ def user_input():
 
                     for _ in range(int(count)):
                         name = generate_unique_name()
-                        insert_file_info(name, size, None, 'waiting')
+                        files.append([name, size, None, 'waiting'])
+
+                    insert_file_info(files)
             except ValueError:
                 print("Invalid input. Please enter size and count as integers.")
             break

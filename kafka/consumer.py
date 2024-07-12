@@ -52,8 +52,9 @@ def process_message(msg, thread_id):
 
         print(f"Processing object {obj_id}: {name}, size: {size} by {thread_id}")
 
-        # Здесь можно добавить код для загрузки данных в хранилище
-        time.sleep(random.randint(1, 5))
+        # Здесь добавить код для загрузки данных в хранилище
+
+        # TODO
 
         # Обновляем статус объекта после успешной обработки
         update_status(obj_id, 'uploaded')

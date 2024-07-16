@@ -4,6 +4,7 @@ import psycopg2
 from confluent_kafka import Producer
 
 from database.db_config import db_config
+from kafka.kafka_config import producer_conf, topic_conf
 
 
 def delivery_report(err, msg):
@@ -32,13 +33,10 @@ def fetch_pending_objects():
         print("Error fetching data from PostgreSQL table", error)
         return []
 
-def main():
-    conf = {
-        'bootstrap.servers': 'localhost:9092'
-    }
 
-    producer = Producer(conf)
-    topic = 'topic-demo'
+def main():
+    producer = Producer(producer_conf)
+    topic = topic_conf
 
     objects = fetch_pending_objects()
     if not objects:
@@ -56,6 +54,7 @@ def main():
         producer.poll(1)
 
     producer.flush()
+
 
 if __name__ == '__main__':
     main()

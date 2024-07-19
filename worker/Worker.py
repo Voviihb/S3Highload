@@ -7,6 +7,7 @@ from confluent_kafka import Consumer, KafkaError, KafkaException
 
 from database.db_config import db_config
 from kafka.kafka_config import consumer_conf, topic_conf
+from s3.storage_functions import *
 
 
 class Worker:
@@ -49,15 +50,6 @@ class Worker:
         except Exception as error:
             print(f"Error updating object {obj_id} hash", error)
 
-    def delete_object(self, obj_id, name):
-        # Здесь добавить код для удаления объекта из хранилища S3
-
-        # TODO
-
-        print(f"Deleting object {obj_id}: {name} by {self.thread_num} status TODO")
-        # После успешного удаления объекта обновляем статус в базе данных
-        self.update_status(obj_id, 'deleted')
-
     @staticmethod
     def get_objects_by_status(status):
         try:
@@ -76,6 +68,14 @@ class Worker:
         except Exception as error:
             print(f"Error fetching objects with status {status}: {error}")
             return []
+
+    def delete_object(self, obj_id, name):
+        result = delete_file(bucket_name, name)
+        if result:
+            print(f"Deleted object {obj_id}: {name} by {self.thread_num}")
+            self.update_status(obj_id, 'deleted')
+        else:
+            print(f"Error deleting object {name}")
 
     def delete_objects_from_queue(self):
         while len(self.task_queue) > 0:

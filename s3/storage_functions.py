@@ -1,8 +1,9 @@
 import boto3
 from botocore.client import Config
 import os
+from botocore.exceptions import ClientError
 
-from storage_config import storage_conf, bucket_name
+from .storage_config import storage_conf, bucket_name
 
 # S3 client init
 s3_client = boto3.client(
@@ -48,10 +49,27 @@ def delete_file(bucket, object_name):
     :param object_name: Object`s name in storage
     """
     try:
-        s3_client.delete_object(Bucket=bucket, Key=object_name)
-        print(f'File {object_name} successfully deleted in {bucket}')
-    except Exception as e:
-        print(f'Error while deleting: {e}')
+        # Check if the object exists
+        s3_client.head_object(Bucket=bucket, Key=object_name)
+        object_exists = True
+    except ClientError as e:
+        if e.response['Error']['Code'] == '404':
+            object_exists = False
+        else:
+            print(f"Error checking object existence: {e}")
+            return False
+
+    if object_exists:
+        try:
+            s3_client.delete_object(Bucket=bucket, Key=object_name)
+            print(f'File {object_name} successfully deleted from {bucket}')
+            return True
+        except ClientError as e:
+            print(f'Error while deleting: {e}')
+            return False
+    else:
+        print(f'File {object_name} not found in {bucket}')
+        return False
 
 
 def get_object(bucket, object_name):
@@ -67,7 +85,6 @@ def get_object(bucket, object_name):
 def head_object(bucket, object_name):
     try:
         response = s3_client.head_object(Bucket=bucket, Key=object_name)
-        # print(response['ResponseMetadata']['HTTPStatusCode'])
         return response
     except Exception as e:
         print(f"Error getting metadata of {object_name}: {e}")

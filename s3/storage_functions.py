@@ -53,7 +53,29 @@ def delete_file(bucket, object_name):
     except Exception as e:
         print(f'Error while deleting: {e}')
 
+
+def get_object(bucket, object_name):
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=object_name)
+        content = response['Body'].read()
+        return content
+    except Exception as e:
+        print(f"Error getting object {object_name}: {e}")
+        return None
+
+
+def head_object(bucket, object_name):
+    try:
+        response = s3_client.head_object(Bucket=bucket, Key=object_name)
+        # print(response['ResponseMetadata']['HTTPStatusCode'])
+        return response
+    except Exception as e:
+        print(f"Error getting metadata of {object_name}: {e}")
+        return None
+
 # create_bucket(bucket_name)
 # file_path = '../kafka/producer.py'
 # upload_file(file_path, bucket_name)
 # delete_file(bucket_name, "producer.py")
+# print(get_object(bucket_name, "load_gen.py"))
+# print(head_object(bucket_name, "load_gen.py"))

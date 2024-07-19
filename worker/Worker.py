@@ -1,4 +1,5 @@
 import json
+import queue
 import threading
 
 import psycopg2
@@ -9,8 +10,9 @@ from kafka.kafka_config import consumer_conf, topic_conf
 
 
 class Worker:
-    def __init__(self, thread_num: int):
+    def __init__(self, thread_num: int, task_queue: list):
         self.thread_num = thread_num
+        self.task_queue = task_queue
 
     def print_info(self):
         print(f'Worker number: {self.thread_num}')
@@ -46,6 +48,39 @@ class Worker:
 
         except Exception as error:
             print(f"Error updating object {obj_id} hash", error)
+
+    def delete_object(self, obj_id, name):
+        # Здесь добавить код для удаления объекта из хранилища S3
+
+        # TODO
+
+        print(f"Deleting object {obj_id}: {name} by {self.thread_num} status TODO")
+        # После успешного удаления объекта обновляем статус в базе данных
+        self.update_status(obj_id, 'deleted')
+
+    @staticmethod
+    def get_objects_by_status(status):
+        try:
+            connection = psycopg2.connect(**db_config)
+            cursor = connection.cursor()
+
+            query = "SELECT id, name FROM Objects WHERE status = %s"
+            cursor.execute(query, (status,))
+            object_ids = cursor.fetchall()
+
+            cursor.close()
+            connection.close()
+            print(object_ids)
+            return object_ids
+
+        except Exception as error:
+            print(f"Error fetching objects with status {status}: {error}")
+            return []
+
+    def delete_objects_from_queue(self):
+        while len(self.task_queue) > 0:
+            obj_id, name = self.task_queue.pop(0)
+            self.delete_object(obj_id, name)
 
     def process_message(self, msg):
         try:
@@ -86,7 +121,7 @@ class Worker:
                     self.process_message(msg)
 
         except KeyboardInterrupt:
-            pass
+            return
         finally:
             consumer.close()
 
@@ -95,14 +130,35 @@ class Worker:
 
 
 if __name__ == '__main__':
-    num_threads = 4  # Количество потоков
-    threads = []
+    while True:
+        user_choice = input("1 - upload files from kafka\n2 - delete all objects\nend - exit\n")
+        if user_choice == '1':
+            num_threads = 4  # Количество потоков
+            threads = []
 
-    for i in range(num_threads):
-        worker = Worker(i)
-        thread = threading.Thread(target=worker.run)
-        thread.start()
-        threads.append(thread)
+            for i in range(num_threads):
+                worker = Worker(i)
+                thread = threading.Thread(target=worker.run)
+                thread.start()
+                threads.append(thread)
 
-    for thread in threads:
-        thread.join()
+            for thread in threads:
+                thread.join()
+
+        elif user_choice == '2':
+            uploaded_objects = Worker.get_objects_by_status("uploaded")
+
+            num_threads = 4
+            threads = []
+
+            for i in range(num_threads):
+                worker = Worker(i, [uploaded_objects[j] for j in range(i, len(uploaded_objects), num_threads)])
+                thread = threading.Thread(target=worker.delete_objects_from_queue)
+                thread.start()
+                threads.append(thread)
+
+            for thread in threads:
+                thread.join()
+
+        elif user_choice == 'end':
+            break

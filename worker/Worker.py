@@ -117,6 +117,9 @@ class Worker:
             result = upload_file(name, bucket_name)
             if result:
                 self.update_status(obj_id, 'uploaded')
+            if os.path.exists(name):
+                os.remove(name)
+                print(f"File {name} deleted successfully after upload.")
 
         except Exception as error:
             print(f"Error processing message: {error}")

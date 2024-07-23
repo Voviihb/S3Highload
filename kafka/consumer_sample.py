@@ -7,6 +7,7 @@ import psycopg2
 from confluent_kafka import Consumer, KafkaException, KafkaError
 
 from database.db_config import db_config
+from kafka.kafka_config import consumer_conf, topic_conf
 
 
 def update_status(obj_id, new_status):
@@ -64,15 +65,9 @@ def process_message(msg, thread_id):
 
 
 def consumer_loop(thread_id):
-    conf = {
-        'bootstrap.servers': 'localhost:9092',
-        'group.id': 'my_group',
-        'auto.offset.reset': 'earliest'
-    }
+    consumer = Consumer(consumer_conf)
 
-    consumer = Consumer(conf)
-
-    topic = 'topic-demo'
+    topic = topic_conf
     consumer.subscribe([topic])
 
     try:
@@ -94,10 +89,10 @@ def consumer_loop(thread_id):
         consumer.close()
 
 
-def start_consumer_threads(num_threads):
+def start_consumer_threads(num_threads, target_func):
     threads = []
     for i in range(num_threads):
-        thread = threading.Thread(target=consumer_loop, args=(i,))
+        thread = threading.Thread(target=target_func, args=(i,))
         thread.start()
         threads.append(thread)
 
@@ -107,4 +102,4 @@ def start_consumer_threads(num_threads):
 
 if __name__ == '__main__':
     num_threads = 4  # Количество потоков
-    start_consumer_threads(num_threads)
+    start_consumer_threads(num_threads, consumer_loop)

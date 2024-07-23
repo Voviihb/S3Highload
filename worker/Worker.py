@@ -1,6 +1,6 @@
 import json
-import queue
 import threading
+import hashlib
 
 import psycopg2
 from confluent_kafka import Consumer, KafkaError, KafkaException
@@ -11,9 +11,9 @@ from s3.storage_functions import *
 
 
 class Worker:
-    def __init__(self, thread_num: int, task_queue: list):
+    def __init__(self, thread_num: int, task_queue: list = None):
         self.thread_num = thread_num
-        self.task_queue = task_queue
+        self.task_queue = task_queue or []
 
     def print_info(self):
         print(f'Worker number: {self.thread_num}')
@@ -82,6 +82,20 @@ class Worker:
             obj_id, name = self.task_queue.pop(0)
             self.delete_object(obj_id, name)
 
+    def create_file(self, name, size):
+        """Создает файл с заданным именем и размером в байтах с случайным содержимым."""
+        with open(name, 'wb') as f:
+            f.write(os.urandom(size))
+        print(f"Created file {name} with size {size} bytes.")
+
+    def compute_md5(self, filename):
+        """Вычисляет MD5 хеш для заданного файла."""
+        hash_md5 = hashlib.md5()
+        with open(filename, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+        return hash_md5.hexdigest()
+
     def process_message(self, msg):
         try:
             message = json.loads(msg.value().decode('utf-8'))
@@ -91,12 +105,18 @@ class Worker:
 
             print(f"Processing object {obj_id}: {name}, size: {size} by {self.thread_num}")
 
-            # Здесь добавить код для загрузки данных в хранилище
+            # Создание файла с случайным содержимым
+            self.create_file(name, size)
 
-            # TODO
+            # Вычисление хеш-суммы
+            hashsum = self.compute_md5(name)
+            print(f"Computed MD5 hash for {name}: {hashsum}")
 
-            # Обновляем статус объекта после успешной обработки
-            self.update_status(obj_id, 'uploaded')
+            # Обновляем статус объекта и сохраняем хеш-сумму
+            self.put_hashsum(obj_id, hashsum)
+            result = upload_file(name, bucket_name)
+            if result:
+                self.update_status(obj_id, 'uploaded')
 
         except Exception as error:
             print(f"Error processing message: {error}")

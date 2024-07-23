@@ -37,8 +37,10 @@ def upload_file(file, bucket, object_name=None):
     try:
         s3_client.upload_file(file, bucket, object_name)
         print(f'File {file} was successfully uploaded {bucket}/{object_name}')
+        return True
     except Exception as e:
         print(f'Error while uploading: {e}')
+        return False
 
 
 def delete_file(bucket, object_name):

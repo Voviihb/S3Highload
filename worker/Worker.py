@@ -1,13 +1,74 @@
 import json
+import signal
 import threading
 import hashlib
 
 import psycopg2
 from confluent_kafka import Consumer, KafkaError, KafkaException
+from prometheus_client import Gauge, Counter, Summary, start_http_server, CollectorRegistry, write_to_textfile
 
 from database.db_config import db_config
 from kafka.kafka_config import consumer_conf, topic_conf
 from s3.storage_functions import *
+
+# Создание реестра метрик
+registry = CollectorRegistry()
+
+# Путь для сохранения метрик
+metrics_file = '/tmp/metrics.prom'
+
+
+def load_metrics():
+    if os.path.exists(metrics_file):
+        with open(metrics_file, 'r') as f:
+            for line in f:
+                if line.startswith('#') or line.strip() == '':
+                    continue
+                name, value = line.split()
+                value = float(value)
+                if name == 'objects_total':
+                    OBJECTS_TOTAL.set(value)
+                elif name == 'size_total':
+                    SIZE_TOTAL.set(value)
+                elif name == 'uploads_total':
+                    UPLOADS_TOTAL._value.set(value)
+                elif name == 'uploads_success':
+                    UPLOADS_SUCCESS._value.set(value)
+                elif name == 'uploads_failure':
+                    UPLOADS_FAILURE._value.set(value)
+                elif name == 'deletions_total':
+                    DELETIONS_TOTAL._value.set(value)
+                elif name == 'deletions_success':
+                    DELETIONS_SUCCESS._value.set(value)
+                elif name == 'deletions_failure':
+                    DELETIONS_FAILURE._value.set(value)
+
+
+def save_metrics(signum, frame):
+    write_to_textfile(metrics_file, registry)
+    print(f'Metrics saved to {metrics_file}')
+    os._exit(0)
+
+
+# Регистрация обработчиков сигналов
+signal.signal(signal.SIGINT, save_metrics)
+signal.signal(signal.SIGTERM, save_metrics)
+
+# Создание метрик
+OBJECTS_TOTAL = Gauge('objects_total', 'Total number of objects in storage', registry=registry)
+SIZE_TOTAL = Gauge('size_total', 'Total size of objects in storage (bytes)', registry=registry)
+
+UPLOADS_TOTAL = Counter('uploads_total', 'Total number of file uploads', registry=registry)
+UPLOADS_SUCCESS = Counter('uploads_success', 'Number of successful file uploads', registry=registry)
+UPLOADS_FAILURE = Counter('uploads_failure', 'Number of failed file uploads', registry=registry)
+UPLOAD_DURATION = Summary('upload_duration_seconds', 'Time taken for upload', registry=registry)
+
+DELETIONS_TOTAL = Counter('deletions_total', 'Total number of file deletions', registry=registry)
+DELETIONS_SUCCESS = Counter('deletions_success', 'Number of successful file deletions', registry=registry)
+DELETIONS_FAILURE = Counter('deletions_failure', 'Number of failed file deletions', registry=registry)
+DELETIONS_DURATION = Summary('deletions_duration_seconds', 'Time taken for deletions', registry=registry)
+
+load_metrics()
 
 
 class Worker:
@@ -110,18 +171,23 @@ class Worker:
 
             # Вычисление хеш-суммы
             hashsum = self.compute_md5(name)
-            print(f"Computed MD5 hash for {name}: {hashsum}")
 
             # Обновляем статус объекта и сохраняем хеш-сумму
             self.put_hashsum(obj_id, hashsum)
-            result = upload_file(name, bucket_name)
-            if result:
-                self.update_status(obj_id, 'uploaded')
+            with UPLOAD_DURATION.time():
+                result = upload_file(name, bucket_name)
+                if result:
+                    UPLOADS_TOTAL.inc()
+                    OBJECTS_TOTAL.inc()
+                    SIZE_TOTAL.inc(size)
+                    UPLOADS_SUCCESS.inc()
+                    self.update_status(obj_id, 'uploaded')
             if os.path.exists(name):
                 os.remove(name)
-                print(f"File {name} deleted successfully after upload.")
 
         except Exception as error:
+            UPLOADS_TOTAL.inc()
+            UPLOADS_FAILURE.inc()
             print(f"Error processing message: {error}")
 
     def consumer_loop(self):
@@ -153,6 +219,8 @@ class Worker:
 
 
 if __name__ == '__main__':
+    start_http_server(8000, registry=registry)
+
     while True:
         user_choice = input("1 - upload files from kafka\n2 - delete all objects\nend - exit\n")
         if user_choice == '1':

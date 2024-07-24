@@ -117,7 +117,7 @@ class Worker:
             connection = psycopg2.connect(**db_config)
             cursor = connection.cursor()
 
-            query = "SELECT id, name FROM Objects WHERE status = %s"
+            query = "SELECT id, name, size FROM Objects WHERE status = %s"
             cursor.execute(query, (status,))
             object_ids = cursor.fetchall()
 
@@ -130,18 +130,24 @@ class Worker:
             print(f"Error fetching objects with status {status}: {error}")
             return []
 
-    def delete_object(self, obj_id, name):
+    def delete_object(self, obj_id, name, size):
         result = delete_file(bucket_name, name)
         if result:
+            OBJECTS_TOTAL.dec()
+            SIZE_TOTAL.dec(size)
+            DELETIONS_TOTAL.inc()
+            DELETIONS_SUCCESS.inc()
             print(f"Deleted object {obj_id}: {name} by {self.thread_num}")
             self.update_status(obj_id, 'deleted')
         else:
+            DELETIONS_TOTAL.inc()
+            DELETIONS_FAILURE.inc()
             print(f"Error deleting object {name}")
 
     def delete_objects_from_queue(self):
         while len(self.task_queue) > 0:
-            obj_id, name = self.task_queue.pop(0)
-            self.delete_object(obj_id, name)
+            obj_id, name, size = self.task_queue.pop(0)
+            self.delete_object(obj_id, name, size)
 
     def create_file(self, name, size):
         """Создает файл с заданным именем и размером в байтах с случайным содержимым."""

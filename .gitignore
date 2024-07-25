@@ -1,5 +1,8 @@
 # Created by .ignore support plugin (hsz.mobi)
 ### Python template
+# our own gitignore
+database/db_config.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
